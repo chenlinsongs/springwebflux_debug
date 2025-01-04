@@ -10,10 +10,12 @@ import org.example.springwebflux.model.ImageResponse;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
-import org.springframework.core.io.buffer.DataBuffer;
-import org.springframework.core.io.buffer.NettyDataBufferFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.core.io.buffer.*;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,13 +30,13 @@ import reactor.core.scheduler.Schedulers;
 import reactor.netty.FutureMono;
 
 import java.io.*;
+import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
+import java.nio.file.Path;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -44,8 +46,10 @@ import java.util.function.Supplier;
  * @CreateTime: 2024/12/1 15:24
  * @Description:
  */
+
 @RestController
 public class FlushResponseController {
+    Logger logger = LoggerFactory.getLogger(FlushResponseController.class);
 
     AtomicInteger index = new AtomicInteger(1);
     boolean isImage = true;
@@ -217,6 +221,93 @@ public class FlushResponseController {
         return Mono.just(completeImage);
     }
 
+    @GetMapping("/upload2/{name}")
+    public Mono<String> upload2(@PathVariable String name) throws InterruptedException {
+        if (myConsumer != null){
+            myConsumer.sendMessage(name);
+            return Mono.just("成功");
+        }else {
+            return Mono.just("对方未上线");
+        }
+    }
+
+    @GetMapping("/upload2/finish")
+    public Mono<String> finish() throws InterruptedException {
+        if (myConsumer != null){
+            myConsumer.finish();
+            return Mono.just("成功返回");
+        }else {
+            return Mono.just("对方未上线");
+        }
+    }
+
+    BlockingQueue<ImageResponse> queue = new LinkedBlockingQueue<>();
+
+    BlockingQueue<String> queueTest = new LinkedBlockingQueue<>();
+    Flux fluxTest;
+    public Flux createFluxFromQueue1() {
+
+        Flux flux = Flux.generate(new Callable<Integer>() {
+            @Override
+            public Integer call() throws Exception {
+                return 0;
+            }
+        }, new BiFunction<Integer, SynchronousSink<DataBuffer>, Integer>() {
+            @Override
+            public Integer apply(Integer state, SynchronousSink<DataBuffer> sink) {
+                if (state < 5) {
+                    DataBuffer bytes = bufferFactory.wrap(("Data " + state).getBytes());
+                    sink.next(bytes);
+                    return state + 1;
+                } else {
+                    sink.complete();
+                    return state;
+                }
+            }
+
+        });
+        return flux;
+    }
+
+    MyConsumer myConsumer;
+    public Flux createFluxFromQueue() {
+        myConsumer = new MyConsumer();
+        Flux flux = Flux.create(myConsumer);
+        return flux;
+    }
+
+    private class MyConsumer implements Consumer<FluxSink<DataBuffer>>{
+
+        private FluxSink<DataBuffer> fluxSink;
+        @Override
+        public void accept(FluxSink<DataBuffer> fluxSink) {
+            this.fluxSink = fluxSink;
+        }
+
+        public void sendMessage(String message){
+            DataBuffer bytes = bufferFactory.wrap(("Data " + message).getBytes());
+            fluxSink.next(bytes);
+        }
+
+        public void finish(){
+            fluxSink.complete();
+        }
+    }
+
+
+
+    Mono<ImageResponse> bodyProducer;
+    DataBufferFactory bufferFactory = new DefaultDataBufferFactory();
+    @GetMapping("/download2")
+    public Mono<Void> download2(ServerWebExchange exchange){
+
+        Mono<Void> mono = Mono.defer(() -> {
+            Flux<DataBuffer> body = createFluxFromQueue();
+            return exchange.getResponse().writeWith(body);
+        });
+        return mono;
+    }
+
     @GetMapping("/writeToDisk")
     public Mono<String> writeToDisk() throws IOException {
         File  outputFile = new File("/Users/linsong.chen/Downloads/image/outputImage_"+index.getAndAdd(1)+".jpg");
@@ -274,6 +365,7 @@ public class FlushResponseController {
     Image imageInProgress;
     long start = 0;
     long endTime = 0;
+    int count = 0;
 //    private synchronized void writeToFile1(ByteBuf byteBuf){
 //        // 假设imageBytes是包含图片数据的字节数组
 //        byte[] imageBytes = new byte[byteBuf.readableBytes()];
@@ -336,7 +428,7 @@ public class FlushResponseController {
                 imageInProgress = new Image();
                 imageInProgress.setBuf(buf);
                 start = System.currentTimeMillis();
-                System.out.println("----------创建图片对象,可读字节:"+imageInProgress.getBuf().readableBytes() +"-----------");
+//                System.out.println("----------创建图片对象,可读字节:"+imageInProgress.getBuf().readableBytes() +"-----------");
             }
             ByteBuf buf = imageInProgress.getBuf();
 
@@ -344,8 +436,10 @@ public class FlushResponseController {
             String end = new String(lastThreeByte);
 
             if ("end".equals(end)){
-                buf.writeBytes(imageBytes,0,imageBytes.length-3);
-                imageInProgress.setLen(len-3);
+                byte[] countByte = Arrays.copyOfRange(imageBytes,imageBytes.length-3-4,imageBytes.length-3);
+                count = byteArrayToInt(countByte);
+                buf.writeBytes(imageBytes,0,imageBytes.length-3-4);
+                imageInProgress.setLen(len-3-4);
             }else {
                 buf.writeBytes(imageBytes);
                 imageInProgress.setLen(len);
@@ -368,7 +462,8 @@ public class FlushResponseController {
                 imageInProgress = null;
 
                 endTime = System.currentTimeMillis();
-                System.out.println("读到图片结尾， 图片大小:"+len +" 耗时："+(endTime - start));
+                logger.info("读到图片结尾， 图片大小:"+len +" 耗时："+(endTime - start)+" 顺序："+count);
+//                System.out.println("读到图片结尾， 图片大小:"+len +" 耗时："+(endTime - start)+" 顺序："+count);
                 len = 0;
 
                 // 创建一个文件输出流，用于写入图片数据
@@ -440,6 +535,24 @@ public class FlushResponseController {
             e.printStackTrace();
             System.out.println("图片写入失败！");
         }
+    }
+
+    public static byte[] intToByteArray(int value) {
+        byte[] bytes = new byte[4];
+        bytes[0] = (byte) (value >>> 24); // 获取最高8位
+        bytes[1] = (byte) (value >>> 16); // 获取次高8位
+        bytes[2] = (byte) (value >>> 8);  // 获取次低8位
+        bytes[3] = (byte) (value);       // 获取最低8位
+        return bytes;
+    }
+
+    public static int byteArrayToInt(byte[] bytes) {
+        int value = 0;
+        value |= (bytes[0] & 0xFF) << 24; // 将第一个字节左移24位
+        value |= (bytes[1] & 0xFF) << 16; // 将第二个字节左移16位
+        value |= (bytes[2] & 0xFF) << 8;  // 将第三个字节左移8位
+        value |= (bytes[3] & 0xFF);       // 将第四个字节保持不变
+        return value;
     }
 
     public class TestSub implements Subscriber{
