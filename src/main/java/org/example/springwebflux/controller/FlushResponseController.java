@@ -29,6 +29,7 @@ import reactor.core.publisher.*;
 import reactor.core.scheduler.Schedulers;
 import reactor.netty.FutureMono;
 
+import java.awt.image.ImageConsumer;
 import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
@@ -233,10 +234,17 @@ public class FlushResponseController {
 
     @GetMapping("/upload2/finish")
     public Mono<String> finish() throws InterruptedException {
-        if (myConsumer != null){
-            myConsumer.finish();
+        if (myConsumer != null || imageConsumer != null){
+            if (myConsumer != null){
+                myConsumer.finish();
+                myConsumer = null;
+            }
+            if (imageConsumer != null){
+                imageConsumer.finish();
+                imageConsumer = null;
+            }
             return Mono.just("成功返回");
-        }else {
+        } else {
             return Mono.just("对方未上线");
         }
     }
@@ -295,6 +303,34 @@ public class FlushResponseController {
     }
 
 
+    ImageConsumer imageConsumer;
+    public Flux createImageFlux() {
+        imageConsumer = new ImageConsumer();
+        Flux flux = Flux.create(imageConsumer);
+        return flux;
+    }
+
+
+    private class ImageConsumer implements Consumer<FluxSink<DataBuffer>>{
+
+        private FluxSink<DataBuffer> fluxSink;
+        @Override
+        public void accept(FluxSink<DataBuffer> fluxSink) {
+            this.fluxSink = fluxSink;
+        }
+
+        public void sendMessage(ImageResponse message){
+            DataBuffer bytes = bufferFactory.wrap(message.getBody());
+            fluxSink.next(bytes);
+        }
+
+        public void finish(){
+            fluxSink.complete();
+        }
+    }
+
+
+
 
     Mono<ImageResponse> bodyProducer;
     DataBufferFactory bufferFactory = new DefaultDataBufferFactory();
@@ -303,6 +339,16 @@ public class FlushResponseController {
 
         Mono<Void> mono = Mono.defer(() -> {
             Flux<DataBuffer> body = createFluxFromQueue();
+            return exchange.getResponse().writeWith(body);
+        });
+        return mono;
+    }
+
+    @GetMapping("/download3")
+    public Mono<Void> download3(ServerWebExchange exchange){
+
+        Mono<Void> mono = Mono.defer(() -> {
+            Flux<DataBuffer> body = createImageFlux();
             return exchange.getResponse().writeWith(body);
         });
         return mono;
@@ -465,6 +511,9 @@ public class FlushResponseController {
                 logger.info("读到图片结尾， 图片大小:"+len +" 耗时："+(endTime - start)+" 顺序："+count);
 //                System.out.println("读到图片结尾， 图片大小:"+len +" 耗时："+(endTime - start)+" 顺序："+count);
                 len = 0;
+                if (imageConsumer != null){
+                    imageConsumer.sendMessage(completeImage);
+                }
 
                 // 创建一个文件输出流，用于写入图片数据
 //                outputFile = new File("/Users/linsong.chen/Downloads/image/outputImage_"+index.getAndAdd(1)+".jpg");
