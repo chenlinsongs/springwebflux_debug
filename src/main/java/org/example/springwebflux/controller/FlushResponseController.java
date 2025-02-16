@@ -1,5 +1,6 @@
 package org.example.springwebflux.controller;
 
+import com.alibaba.fastjson.JSON;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.buffer.UnpooledHeapByteBuf;
@@ -53,7 +54,7 @@ public class FlushResponseController {
     Logger logger = LoggerFactory.getLogger(FlushResponseController.class);
 
     AtomicInteger index = new AtomicInteger(1);
-    boolean isImage = true;
+    boolean isImage = false;
 
     /**
      * 返回值
@@ -185,23 +186,6 @@ public class FlushResponseController {
         }
     }
 
-    @GetMapping("/defer/{name}")
-    public Flux<String> defer(@PathVariable String name) {
-        Flux<String> flux = Flux.defer(() -> {
-            // 这里可以执行异步操作，例如从另一个线程获取数据
-            try {
-                Thread.sleep(1000);
-                System.out.println("数据生成成功");
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-            return Flux.just("data1", "data2");
-        });
-//        flux.subscribe(new TestSub());
-        System.out.println("flux 返回");
-        return flux;
-    }
-
     @PostMapping("/upload")
     public Mono<String>  live4(ServerWebExchange exchange) throws IOException {
         Flux<DataBuffer> requestBody = exchange.getRequest().getBody();
@@ -307,6 +291,33 @@ public class FlushResponseController {
     public Flux createImageFlux() {
         imageConsumer = new ImageConsumer();
         Flux flux = Flux.create(imageConsumer);
+        flux =  flux.map(new Function() {
+            @Override
+            public Object apply(Object o) {
+                return null;
+            }
+        });
+//        flux.subscribe(new CoreSubscriber() {
+//            @Override
+//            public void onSubscribe(Subscription s) {
+//
+//            }
+//
+//            @Override
+//            public void onNext(Object o) {
+//
+//            }
+//
+//            @Override
+//            public void onError(Throwable t) {
+//
+//            }
+//
+//            @Override
+//            public void onComplete() {
+//
+//            }
+//        });
         return flux;
     }
 
@@ -320,7 +331,7 @@ public class FlushResponseController {
         }
 
         public void sendMessage(ImageResponse message){
-            DataBuffer bytes = bufferFactory.wrap(message.getBody());
+            DataBuffer bytes = bufferFactory.wrap(JSON.toJSONString(message).getBytes());
             fluxSink.next(bytes);
         }
 
@@ -334,6 +345,10 @@ public class FlushResponseController {
 
     Mono<ImageResponse> bodyProducer;
     DataBufferFactory bufferFactory = new DefaultDataBufferFactory();
+
+    /**
+     * 推送字符
+     * */
     @GetMapping("/download2")
     public Mono<Void> download2(ServerWebExchange exchange){
 
@@ -344,6 +359,9 @@ public class FlushResponseController {
         return mono;
     }
 
+    /**
+     * 推送图片
+     * */
     @GetMapping("/download3")
     public Mono<Void> download3(ServerWebExchange exchange){
 
@@ -504,6 +522,7 @@ public class FlushResponseController {
                 completeImage.setBody(bytes);
                 completeImage.setReadableBytes(completeReadableBytes);
                 completeImage.setLen(imageInProgress.getLen());
+                completeImage.setCount(count);
 
                 imageInProgress = null;
 

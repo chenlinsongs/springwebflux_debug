@@ -10,6 +10,8 @@ public class ImageResponse {
     private long readableBytes;
     private long len;
 
+    private long count;
+
     public byte[] getBody() {
         return body;
     }
@@ -32,5 +34,13 @@ public class ImageResponse {
 
     public void setLen(long len) {
         this.len = len;
+    }
+
+    public long getCount() {
+        return count;
+    }
+
+    public void setCount(long count) {
+        this.count = count;
     }
 }
