@@ -18,6 +18,11 @@
             <artifactId>fastjson</artifactId>
             <version>1.2.83</version> <!-- 请使用最新版本 -->
         </dependency>
+        <dependency>
+            <groupId>com.github.kokorin.jaffree</groupId>
+            <artifactId>jaffree</artifactId>
+            <version>2023.09.10</version>
+        </dependency>
     </dependencies>
     <properties>
         <maven.compiler.source>8</maven.compiler.source>

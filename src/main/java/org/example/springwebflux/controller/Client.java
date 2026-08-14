@@ -19,7 +19,7 @@ import java.util.Optional;
  * @CreateTime: 2024/11/23 23:50
  * @Description:
  */
-@Configuration
+//@Configuration
 public class Client {
     @Bean
     WebClient webClient(WebClient.Builder builder) {

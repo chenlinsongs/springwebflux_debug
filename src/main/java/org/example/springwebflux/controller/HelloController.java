@@ -531,8 +531,8 @@ public class HelloController {
     public Mono<Void> live4(ServerWebExchange exchange) throws IOException {
 
         Mono<Void> mono = webClient
-                .method(HttpMethod.POST)
-                .uri("http://localhost:8082/hello")
+                .method(HttpMethod.GET)
+                .uri("http://localhost:8083/verify/create")
                 .headers(headers -> {
                     headers.addAll(exchange.getRequest().getHeaders());
                 })

@@ -1,0 +1,42 @@
+# 优化的上传配置
+spring:
+  webflux:
+    multipart:
+      # 临时文件存储位置 - 使用SSD以提高性能
+      file-storage-directory: ${java.io.tmpdir}/spring-multipart-uploads
+      
+      # 不限制文件大小
+      max-file-size: -1
+      
+      # 不限制part数量
+      max-parts: -1
+      
+      # 单个请求的最大大小
+      max-request-size: -1
+      
+  codec:
+    # 超过这个大小的文件会使用临时文件而不是内存
+    # 调整为10MB，减少小文件的磁盘I/O
+    max-in-memory-size: 10MB
+
+# 日志配置
+logging:
+  level:
+    org.example.springwebflux.controller: DEBUG
+    org.springframework.http.codec.multipart: DEBUG
+    reactor.netty.http.server: DEBUG
+
+# 说明：
+# 1. 文件上传过程：
+#    - iOS上传 → Spring接收 → 写入临时文件 → FilePart创建 → 您的代码执行 → 复制到目标位置
+# 
+# 2. 性能优化点：
+#    - 使用SSD存储临时文件
+#    - 增大内存缓冲区，小文件直接在内存处理
+#    - 目标位置也使用SSD
+#
+# 3. 限制：
+#    - 仍然需要等待完整上传
+#    - 但至少临时文件写入是流式的
+#    - 磁盘I/O已优化
+

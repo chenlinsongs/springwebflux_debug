@@ -1,6 +1,8 @@
 package org.example.springwebflux.controller;
 
 import com.alibaba.fastjson.JSON;
+import com.github.kokorin.jaffree.ffmpeg.FFmpeg;
+import com.github.kokorin.jaffree.ffmpeg.FFmpegResult;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.buffer.UnpooledHeapByteBuf;
@@ -76,6 +78,7 @@ public class FlushResponseController {
             }
         });
         flux.subscribe(new TestSub());
+
         return flux;
     }
 
@@ -548,6 +551,27 @@ public class FlushResponseController {
             System.out.println("图片写入失败！");
         }
     }
+
+//    public void realTimeH264ToMP4(byte[] h264DataInput) throws IOException {
+//        // 创建管道流，用于传递 H.264 数据
+//        PipedInputStream pipedInputStream = new PipedInputStream();
+//        PipedOutputStream pipedOutputStream = new PipedOutputStream(pipedInputStream);
+//
+//        // 启动 FFmpeg 进程
+//        FFmpeg ffmpeg = FFmpeg.atPath();
+//        FFmpegResult result = ffmpeg.addInput(pipedInputStream)
+//                .addOutput("output.mp4")
+//                .execute();
+//
+//        // 模拟从 Android 上传的 H.264 数据
+//        try {
+//            byte[] h264Data = h264DataInput; // 替换为实际获取数据的逻辑
+//            pipedOutputStream.write(h264Data);
+//            pipedOutputStream.close();
+//        } catch (IOException e) {
+//            e.printStackTrace();
+//        }
+//    }
 
     private synchronized void writeToFile1(ByteBuf byteBuf){
         // 假设imageBytes是包含图片数据的字节数组
